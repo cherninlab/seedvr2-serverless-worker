@@ -26,6 +26,7 @@ RUN set -euo pipefail; \
     "${PY_BIN}" -m pip install --break-system-packages --no-cache-dir -r /app/requirements.txt
 
 COPY handler.py /app/handler.py
+COPY sitecustomize.py /app/sitecustomize.py
 
 ENV PYTHONUNBUFFERED=1
 ENV SEEDVR2_APP_ROOT=/opt/seedvr2_videoupscaler

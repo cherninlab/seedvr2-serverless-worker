@@ -311,6 +311,8 @@ def _handler(job: Dict[str, Any]) -> Dict[str, Any]:
         run_env = os.environ.copy()
         visible_gpu = job_input.get("visible_gpu", job_input.get("cuda_device", 0))
         run_env["CUDA_VISIBLE_DEVICES"] = str(visible_gpu)
+        existing_pythonpath = run_env.get("PYTHONPATH", "")
+        run_env["PYTHONPATH"] = f"/app:{existing_pythonpath}" if existing_pythonpath else "/app"
 
         proc = _run(cmd, env=run_env)
         if proc.returncode != 0:
