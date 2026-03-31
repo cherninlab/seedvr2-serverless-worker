@@ -15,7 +15,7 @@ RUN set -euo pipefail; \
     if ! "${PY_BIN}" -m pip --version >/dev/null 2>&1; then \
       apt-get update && apt-get install -y --no-install-recommends python3-pip && rm -rf /var/lib/apt/lists/*; \
     fi; \
-    apt-get update && apt-get install -y --no-install-recommends git ffmpeg ca-certificates && rm -rf /var/lib/apt/lists/*; \
+    apt-get update && apt-get install -y --no-install-recommends git ffmpeg ca-certificates rclone && rm -rf /var/lib/apt/lists/*; \
     "${PY_BIN}" -m pip install --break-system-packages --no-cache-dir setuptools wheel; \
     "${PY_BIN}" -m pip install --break-system-packages --no-cache-dir --index-url https://download.pytorch.org/whl/cu124 torch torchvision; \
     git clone --depth 1 https://github.com/numz/ComfyUI-SeedVR2_VideoUpscaler /opt/seedvr2_videoupscaler; \

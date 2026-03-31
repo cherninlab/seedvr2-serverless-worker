@@ -271,6 +271,52 @@ def _mux_original_audio(source_video: Path, upscaled_video: Path, out_video: Pat
     )
 
 
+def _resolve_remote_target(remote_value: str, local_file: Path) -> str:
+    target = str(remote_value).strip()
+    if not target:
+        raise ValueError("gdrive_remote_path is empty")
+    if target.endswith("/"):
+        return f"{target}{local_file.name}"
+    if target.lower().endswith(".mp4"):
+        return target
+    return f"{target}/{local_file.name}"
+
+
+def _upload_with_rclone(local_file: Path, remote_value: str, rclone_conf_b64: str) -> str:
+    rclone_bin = _which_or_none("rclone")
+    if not rclone_bin:
+        raise RuntimeError("rclone binary not available in worker image")
+
+    remote_target = _resolve_remote_target(remote_value, local_file)
+    conf_bytes = base64.b64decode(rclone_conf_b64)
+
+    with tempfile.TemporaryDirectory(prefix="rclone_conf_") as td:
+        conf_path = Path(td) / "rclone.conf"
+        conf_path.write_bytes(conf_bytes)
+        _must_run(
+            [
+                rclone_bin,
+                "copyto",
+                str(local_file),
+                remote_target,
+                "--config",
+                str(conf_path),
+                "--drive-chunk-size",
+                "64M",
+                "--transfers",
+                "1",
+                "--checkers",
+                "2",
+                "--retries",
+                "5",
+                "--low-level-retries",
+                "10",
+            ]
+        )
+
+    return remote_target
+
+
 def _handler(job: Dict[str, Any]) -> Dict[str, Any]:
     job_input = job.get("input", {})
     runtime = _detect_seedvr2_runtime()
@@ -337,6 +383,15 @@ def _handler(job: Dict[str, Any]) -> Dict[str, Any]:
             "output_filename": final_output.name,
             "command": cmd,
         }
+
+        remote_path = job_input.get("gdrive_remote_path")
+        if remote_path:
+            rclone_conf_b64 = str(job_input.get("rclone_conf_base64", os.getenv("RCLONE_CONF_BASE64", "")))
+            if not rclone_conf_b64.strip():
+                raise ValueError("gdrive_remote_path provided but no rclone_conf_base64 supplied")
+            uploaded_target = _upload_with_rclone(final_output, str(remote_path), rclone_conf_b64)
+            response["gdrive_remote_path"] = uploaded_target
+            response["uploaded_via"] = "rclone"
 
         if return_mode == "base64":
             response["video_base64"] = base64.b64encode(final_output.read_bytes()).decode("utf-8")
