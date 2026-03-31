@@ -1,0 +1,22 @@
+{
+  "input": {
+    "source_video_url": "https://example.com/input.mp4",
+    "drop_first_frame": true,
+    "preserve_audio": true,
+    "return_mode": "metadata",
+    "dit_model": "seedvr2_ema_7b_fp16.safetensors",
+    "resolution": 2160,
+    "batch_size": 37,
+    "temporal_overlap": 5,
+    "color_correction": "wavelet_adaptive",
+    "uniform_batch_size": true,
+    "vae_encode_tiled": true,
+    "vae_decode_tiled": true,
+    "vae_encode_tile_size": 1024,
+    "vae_decode_tile_size": 768,
+    "vae_encode_tile_overlap": 128,
+    "vae_decode_tile_overlap": 128,
+    "ten_bit": true,
+    "seed": 42
+  }
+}
