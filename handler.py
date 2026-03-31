@@ -311,6 +311,7 @@ def _handler(job: Dict[str, Any]) -> Dict[str, Any]:
         run_env = os.environ.copy()
         visible_gpu = job_input.get("visible_gpu", job_input.get("cuda_device", 0))
         run_env["CUDA_VISIBLE_DEVICES"] = str(visible_gpu)
+        run_env["PYTORCH_CUDA_ALLOC_CONF"] = str(job_input.get("pytorch_cuda_alloc_conf", "backend:native"))
         existing_pythonpath = run_env.get("PYTHONPATH", "")
         run_env["PYTHONPATH"] = f"/app:{existing_pythonpath}" if existing_pythonpath else "/app"
 
