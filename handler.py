@@ -4,6 +4,7 @@ import os
 import shutil
 import subprocess
 import tempfile
+import time
 import urllib.request
 import uuid
 from fractions import Fraction
@@ -11,6 +12,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import runpod
+import requests
 
 
 def _run(cmd: List[str], env: Optional[Dict[str, str]] = None) -> subprocess.CompletedProcess:
@@ -34,6 +36,7 @@ def _which_or_none(name: str) -> Optional[str]:
 
 def _detect_seedvr2_runtime() -> Dict[str, Optional[str]]:
     app_roots = [
+        Path("/opt/seedvr2_videoupscaler"),
         Path("/workspace/seedvr2_videoupscaler"),
         Path("/workspace/SeedVR2"),
         Path("/workspace"),
@@ -41,6 +44,7 @@ def _detect_seedvr2_runtime() -> Dict[str, Optional[str]]:
     app_root = next((p for p in app_roots if p.exists()), None)
 
     script_candidates = [
+        Path("/opt/seedvr2_videoupscaler/inference_cli.py"),
         Path("/workspace/seedvr2_videoupscaler/inference_cli.py"),
         Path("/workspace/SeedVR2/inference_cli.py"),
         Path("/workspace/inference_cli.py"),
@@ -48,6 +52,7 @@ def _detect_seedvr2_runtime() -> Dict[str, Optional[str]]:
     script_path = next((str(p) for p in script_candidates if p.exists()), None)
 
     py_candidates = [
+        Path("/opt/seedvr2_videoupscaler/.venv/bin/python"),
         Path("/workspace/seedvr2_videoupscaler/.venv/bin/python"),
         Path("/workspace/SeedVR2/.venv/bin/python"),
     ]
@@ -85,9 +90,35 @@ def _probe_runtime(runtime: Dict[str, Optional[str]]) -> Dict[str, Any]:
 
 
 def _download_source(url: str, dst: Path) -> None:
-    with urllib.request.urlopen(url, timeout=120) as resp:
-        data = resp.read()
-    dst.write_bytes(data)
+    if "drive.google.com" in url:
+        import gdown
+
+        ok = gdown.download(url=url, output=str(dst), quiet=False, fuzzy=True)
+        if ok is None:
+            raise RuntimeError(f"Failed to download Google Drive URL: {url}")
+        return
+
+    last_error: Optional[Exception] = None
+    for attempt in range(1, 4):
+        try:
+            with requests.get(
+                url,
+                stream=True,
+                timeout=(20, 600),
+                headers={"User-Agent": "seedvr2-serverless-worker/1.0"},
+            ) as resp:
+                resp.raise_for_status()
+                with open(dst, "wb") as f:
+                    for chunk in resp.iter_content(chunk_size=1024 * 1024):
+                        if chunk:
+                            f.write(chunk)
+            return
+        except Exception as err:
+            last_error = err
+            if attempt < 3:
+                time.sleep(3 * attempt)
+
+    raise RuntimeError(f"Failed to download source URL after retries: {url}: {last_error}")
 
 
 def _decode_b64_video(data: str, dst: Path) -> None:
@@ -170,6 +201,8 @@ def _build_inference_cmd(
         str(input_video),
         "--output",
         str(output_video),
+        "--model_dir",
+        str(job_input.get("model_dir", "/workspace/models/SEEDVR2")),
         "--dit_model",
         str(job_input.get("dit_model", "seedvr2_ema_7b_fp16.safetensors")),
         "--cuda_device",
@@ -276,7 +309,8 @@ def _handler(job: Dict[str, Any]) -> Dict[str, Any]:
         cmd = _build_inference_cmd(runtime, processed_input, raw_output, job_input)
 
         run_env = os.environ.copy()
-        run_env["CUDA_VISIBLE_DEVICES"] = str(job_input.get("visible_gpu", 0))
+        visible_gpu = job_input.get("visible_gpu", job_input.get("cuda_device", 0))
+        run_env["CUDA_VISIBLE_DEVICES"] = str(visible_gpu)
 
         proc = _run(cmd, env=run_env)
         if proc.returncode != 0:
